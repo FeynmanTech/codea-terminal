@@ -378,7 +378,7 @@ void main()
     float posInText = vTexCoord.x;
     vec4 ccol = texture2D(text, vec2(posInText, vTexCoord.y));
     float characterX = float(int(ccol.r*255.))/255. * fw;
-    float characterY = float(int(ccol.g*255.))/255.;
+    float characterY = ccol.g*256./rows;
 
     float textPos = mod(pos.x, fs * scale) / scale + characterX;
     float textPosShifted = textPos / fw;
@@ -998,10 +998,12 @@ function term.print(...)
         table.insert(c, 1, {})
         table.insert(mod, 1, {})
         table.insert(invt, 1, {})
+        table.insert(bold, 1, {})
         for n = 1, termW do
             setChar(n, 1, " ")
             mod[1][n] = 0
             invt[1][n] = 0
+            bold[1][n] = 0
         end
     end end
     local s = "\255"-- .. table.concat({...}, "")
@@ -1028,7 +1030,7 @@ function term.print(...)
             invt[h-cur.y][cur.x] = 1
         elseif char == "\254" then
             bold[h-cur.y][cur.x] = 1
-        elseif mod[char] ~= 0 and mod[h-cur.y] then
+        elseif mod[char] ~= 0 and mod[h-cur.y] and not term.NO_COLOR then
             mod[h-cur.y][cur.x] = ch
             setColor(cur.x, h-cur.y, char)
         else
@@ -1055,6 +1057,12 @@ function term.print(...)
         end
     end
     --]]
+end
+
+function term.printRaw(...)
+    term.NO_COLOR = true
+    term.print(...)
+    term.NO_COLOR = false
 end
 
 io.write = term.print
@@ -1144,10 +1152,11 @@ do -- so I can auto-indent
                 c[row][column] = " "
                 mod[row][column] = 0
                 invt[row][column] = 0
+                bold[row][column] = 0
             end
         end
         cur.x = 1
-        cur.y = 0
+        cur.y = 1
         SILENT = true--term.inprog
         --]=]
     end
@@ -1644,10 +1653,10 @@ function term:main()
     --]==]
     local ccol = color(255)
     local bo = 0
-    for y = 1 + scroll, h + scroll do
+    for y = h + scroll, 1 + scroll, -1 do
         for x = 1, w do
             inv = (inv + invt[y][x]) % 2
-            --bo = (bo + bold[y][x]) % 2
+            bo = (bo + bold[y][x]) % 2
             local inv = inv
             if x == cur.x and y == h - cur.y and math.floor(ElapsedTime*2 % 2) == 0 then inv = (inv+1)%2 end
             if cols[mod[y][x]] and mod[y][x] ~= col then
@@ -1657,7 +1666,7 @@ function term:main()
                 term.text:set(x, y-scroll, color(_c[x]:byte(), 0,0,0))
                 term.cmap:set(x, y-scroll, color(255))
             else
-                term.text:set(x, y-scroll, color(c[y][x]:byte(), 0,0,inv*255))
+                term.text:set(x, y-scroll, color(c[y][x]:byte(), bo*3,0,inv*255))
                 term.cmap:set(x, y-scroll, ccol)
             end
         end
@@ -1680,17 +1689,19 @@ end
 function keyboard(k)
     --_print(
     term.key = k
-    if k == "\n" or k == term.__EXITKEY then
+    term.__EXITKEY = term.__EXITKEY or "N/A"
+    if k == "\n" or (term.__EXITKEY and k:find(term.__EXITKEY)) then
         if k == "\n" and not(term.inprog or term.__READING or term.__CO) then
             term.command()
             --term.key = ""
-        elseif k==term.__EXITKEY then
+        elseif k:find(term.__EXITKEY) then
             if not term.__READING then
                 term.__READV = ""
             end
             cur.y = cur.y + 1
             --alert("returning")
             term.__READING = false
+            term.__EXITKEY = nil
         else
             cur.y = cur.y + 1
         end
