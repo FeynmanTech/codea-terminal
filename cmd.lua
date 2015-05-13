@@ -5,6 +5,141 @@ saveText("Documents:termhl")
 usage.dist = "dist [x1,y1 x2,y2] [x1 y1 x2 y2]"
 help.dist = "Displays the distance between the two given points"
 --[=[END_TAB]=]
+--[=[TAB:devhelp]=]
+dh = dh or {}
+
+dh.mo = {}
+dh.funcs = {}
+
+dh.order = {"Program development", "Exit"}
+
+dh.mo["Program development"] = {
+    "Command repository project how-to", 
+    "Basic command structure", 
+    "Arguments/parameters",
+    "Example program"
+}
+
+-- │─┐└┘┌
+dh.code = function(code)
+    term.print("\3\218" .. ("\196"):rep(termW-3).."\191")
+    for ln in (code .. "\n"):gmatch("(.-)\n") do
+        term.print("\3\179\255 " .. ln .. (" "):rep(termW-4-#ln) .. "\3\179")
+    end
+    term.print("\3\192" .. ("\196"):rep(termW-3).."\217\255")
+end
+
+function dh.sep()
+    term.print(col.gray .. ("\196"):rep(termW - 1) .. "\255\n")
+end
+
+dh.funcs["Program development"] = {
+function()
+    cmd.clear()
+    print("\1\255Command repositories\1")
+    print("User-written commands can be added to MockTerm via a command repository - if a repo is set, MockTerm assigns each tab in the repo to a command (with the same name as the given tab).")
+    print("\n" .. col.gray .. 'In the setup menu, the command repository is referred to as the "command project."\255')
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+    dh.sep()
+    print("\rWhen a tab in the command repo is loaded, the code inside it is packed into a function, which is called whenever the command is run.\nIt can be useful to think of command code not as a separate script, but as a function called inside the terminal, with access to most of the internals.")
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+    dh.sep()
+    print("\rThis open-ness comes at a cost - it is possible to modify the internal data and processes of the terminal, in potentially unexpected ways.")
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+end,
+function()
+    cmd.clear()
+    print("\1\255Command structure\1")
+    print("Although different in concept, external commands are structured similarly to a stand-alone script")
+    print("\nThe simplest commands, in fact, can usually be run as individual programs in a raw Lua emvironment and behave exactly as they do in this environment.")
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+    dh.sep()
+    print("\rThe Hello World program, for example, is simple:")
+    dh.code('print("Hello World")')
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+end,
+function()
+    cmd.clear()
+    print("\1\255Arguments & Parameters\1")
+    print("MockTerm supports the same arguments format as every other terminal:")
+    dh.code[[Arguments:
+    some_command arg1 arg2
+Parameters:
+    some_command --flag1 --boolean --param1=value]]
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+    dh.sep()
+    print("\rThese values are passed to the command source as the tables \254arg\254 and \254params\254.")
+    print("Arguments can be read exactly as they are in standalone Lua:")
+    dh.code("first_arg = arg[1]")
+    print("Parameters are stored by name, and are read like this:")
+    dh.code[[foo = params.bar]]
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+    dh.sep()
+    print("\rParameters can be set with or without arguments.\nWith no argument (\254--param\254), the parameter is simply set to \254true\254.")
+    print("Parameter arguments are passed to the command without being evaluated, so this statement:")
+    dh.code[[something --number=1+1]]
+    print('will set \254params.number\254 to "1+1", not 4.')
+    term.read("\nPress any key to continue...", false, ".")
+    coroutine.yield()
+    cur.y = cur.y - 1
+end,
+function()
+    print("This isn't supported yet, so read through the source code or something.")
+end
+}
+
+dh.cmenu = nil
+
+dh.sel = 1
+
+dh.menuLevel = 1
+
+dh.nff = false
+
+function dh.mainMenu(k)
+    k = k or ""
+    cmd.clear()
+    if k == "l" or k == "a" then
+        dh.sel = dh.sel % #dh.order + 1
+    elseif k == "p" or k == "q" then
+        dh.sel = (dh.sel + #dh.order - 2) % #dh.order + 1
+    end
+    cur.y = 2
+    for i, v in ipairs(dh.order) do
+        term.print((i == dh.sel and "\255" or col.gray) .. v .. (i == dh.sel and "\255" or col.white).."\n")
+    end
+    if k == "\n" and dh.nff then
+        if dh.menuLevel == 1 then
+            dh.cmenu = dh.order[dh.sel]
+            dh.order = dh.mo[dh.order[dh.sel]]
+            dh.menuLevel = 2
+        else
+            term.coroutine = coroutine.create(dh.funcs[dh.cmenu][dh.sel])
+            term.exit("")
+        end
+        if not dh.order then term.exit("") end
+        dh.nff = false
+    else
+        dh.nff = true
+    end
+end
+
+term.enter(dh.mainMenu)
+--[=[END_TAB]=]
 --[=[TAB:hl]=]
 if not(arg and arg[1]) then
     print("\5Please specify a source tab!\255")
@@ -533,10 +668,12 @@ elseif arg[1] then
         print(arg[1] .. ": " .. arg[1]:byte())
     end
 else
-    for n = 32, 255 do
-        term.print(ansi[n])
+    local s = "return '"
+    for n = 32, 253 do
+        s = s .. "\\" .. n
     end
-    print()
+    local f = loadstring(s .. "'")
+    term.printRaw((params.bold and "\254" or "")..f()..(params.bold and "\254\n" or "\n"))
 end
 
 --[=[END_TAB]=]
