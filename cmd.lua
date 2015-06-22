@@ -5,6 +5,9 @@ saveText("Documents:termhl")
 usage.dist = "dist [x1,y1 x2,y2] [x1 y1 x2 y2]"
 help.dist = "Displays the distance between the two given points"
 --[=[END_TAB]=]
+--[=[TAB:bold]=]
+print("\254" .. table.concat(arg, " ") .. "\254")
+--[=[END_TAB]=]
 --[=[TAB:devhelp]=]
 dh = dh or {}
 
@@ -204,6 +207,7 @@ end
 
 local f = arg[1] -- table.concat(arg, " ")
 --print(f)
+--1print((arg[2] and (arg[2] .. ":") or "Terminal_cmd:") .. f)
 local s, t = pcall(readProjectTab, (arg[2] and (arg[2] .. ":") or "Terminal_cmd:") .. f)
 if not s then
     print("No cmd tab " .. f .. ", searching for file")
@@ -215,24 +219,23 @@ if s then
     t = "\n" .. t .. "\n"
     for i, v in pairs(ec) do
         --_print(v)
-        t = t:gsub("([^A-Za-z0-9])(" .. i .. ")([^A-Za-z0-9])", "%1" .. v.."%2%3\255")
+        t = t:gsub("([^A-Za-z0-9])(" .. i .. ")([^A-Za-z0-9])", function(a,b,c)return a..v..b..c.."\255" end)
     end
     for i, v in pairs(hlc) do
         --_print(v)
-        t = t:gsub("([^A-Za-z0-9])(" .. i .. ")", "%1" .. v.."%2\255")
-        t = t:gsub("(" .. i .. ")([^A-Za-z0-9])", v.."%1\255%2")
+        t = t:gsub("([^A-Za-z0-9])(" .. i .. ")", function(a,b) return a..v..b.."\255" end)
+        t = t:gsub("(" .. i .. ")([^A-Za-z0-9])", function(a,b) return v..a.."\255"..b end)
     end
     for i, v in pairs(indh) do
         --_print(v)
-        t = t:gsub("(" .. i .. ")",  v.."%1\255")
+        t = t:gsub("(" .. i .. ")",  function(a) return v..a.."\255" end)
     end
     for str in t:gmatch('%b""') do
         local o = str
         for i, v in pairs(col) do
             str = str:gsub(v, "")
         end
-        str = pesc(str)
-        --_print(str)
+        str = str:gsub("%%", function()return "%%" end)
         t = t:gsub("(" .. pesc(o) .. ")", col.lightlightorange .. str .. "\255")
     end
     ---[[
@@ -241,15 +244,15 @@ if s then
         for i, v in pairs(col) do
             str = str:gsub(v, "")
         end
-        str = pesc(str)
-        t = t:gsub("(" .. pesc(o) .. "(", col.lightlightorange .. str .. "\255")
+        str = str:gsub("%%", function()return "%%" end)
+        t = t:gsub("(" .. pesc(o) .. ")", col.lightlightorange .. str .. "\255")
     end
     for str in t:gmatch("%-\255" .. col.lightlightyellow .. "%-\255.-\n") do
         local o = str
         for i, v in pairs(col) do
             str = str:gsub(v, "")
         end
-        str = pesc(str)
+        str = str:gsub("%%", function()return "%%" end)
         t = t:gsub(pesc(o), col.gray .. str .. "\255")
     end
     for str in t:gmatch("[^-]%-%-%[%[.-%]%]") do
@@ -260,10 +263,11 @@ if s then
         for l in (str .. "\n"):gmatch("[^\n]+\n") do -- so fancy
             str = str:gsub(pesc(l), col.gray .. l)
         end
-        str = pesc(str)
+        str = str:gsub("%%", function()return "%%" end)
         t = t:gsub(pesc(o), col.gray .. str .. "\255")
     end
     --]]
+    print("Parsed")
     local m, occ = t:gsub("\n", "")
     local n = 1
     local title = f .. ".lua (" .. occ .. " lines)"
@@ -277,22 +281,22 @@ else
 end
 --[=[END_TAB]=]
 --[=[TAB:log]=]
-jmenuOptions = {"New entry", "List entries", "Search entries", "Setup", "Exit"}
+jmenuOptions = {"New entry", "List entries", "Search entries", "Search for text in entries", "Setup", "Exit"}
 jmenuSelect = 1
 
 function jNewLog()
     term.read("Enter your password: ", true)
     coroutine.yield()
-    if md5.sumhexa(term.getInput()) == readText("Project:jPass") then
+    if md5.sumhexa(term.getInput()) == term.readfile("jPass") then
         term.read("\nLog Title: ")
         coroutine.yield()
         local title = term.getInput()
         term.read("\nEnter your log: ", false, "  ")
         coroutine.yield()
-        local e = readText("Project:jEntries") or ""
+        local e = term.readfile("jEntries") or ""
         local t = getTimeData()
         e = e .. os.time() .. ":{"..title.."}{" .. term.getInput() .. "};\n"
-        saveText("Project:jEntries", e)
+        term.savefile("jEntries", e)
     else
         print("Wrong password!")
     end
@@ -302,14 +306,15 @@ end
 function jList()
     term.read("Enter your password: ", true)
     coroutine.yield()
-    if md5.sumhexa(term.getInput()) == readText("Project:jPass") then
-        local t = readText("Project:jEntries")
+    if md5.sumhexa(term.getInput()) == term.readfile("jPass") then
+        local t = term.readfile("jEntries")
         local e = {}
         for time, title, val in t:gmatch("(%d+):(%b{}){(.-)};\n") do
             term.print("\n\1" .. os.date("%c", tonumber(time)) .. ": " .. title:sub(2,-2) .. "\1\n" .. val .. "\n")
         end
     else
         print("Wrong password!")
+        print(term.getInput())
     end
     term.read("", false, "")
     term.enter(jmainMenu)
@@ -318,14 +323,34 @@ end
 function jSearch()
     term.read("Enter your password: ", true)
     coroutine.yield()
-    if md5.sumhexa(term.getInput()) == readText("Project:jPass") then
+    if md5.sumhexa(term.getInput()) == term.readfile("jPass") then
         term.read("Search query: ")
         coroutine.yield()
-        local t = readText("Project:jEntries")
+        local t = term.readfile("jEntries")
         local e = {}
         for time, title, val in t:gmatch("(%d+):(%b{}){(.-)};\n") do
-            if title:lower():find(term.getInput():lower()) then
+            if title:lower():find(term.getInput():lower():gsub("\n", "")) then
                 term.print("\n\1" .. os.date("%c", tonumber(time)) .. ": " .. title:sub(2,-2) .. "\1\n" .. val .. "\n")
+            end
+        end
+    else
+        print("Wrong password!")
+    end
+    term.read("", false, "")
+    term.enter(jmainMenu)
+end
+
+function jSearchText()
+    term.read("Enter your password: ", true)
+    coroutine.yield()
+    if md5.sumhexa(term.getInput()) == term.readfile("jPass") then
+        term.read("Search query: ")
+        coroutine.yield()
+        local t = term.readfile("jEntries")
+        local e = {}
+        for time, title, val in t:gmatch("(%d+):(%b{}){(.-)};\n") do
+            if val:lower():find(term.getInput():lower():gsub("\n", "")) then
+                term.print("\n\1" .. os.date("%c", tonumber(time)) .. ": " .. title:sub(2,-2) .. "\1\n" .. val:gsub(term.getInput(), "\254" .. term.getInput() .. "\254") .. "\n")
             end
         end
     else
@@ -342,7 +367,8 @@ function jSetup()
     term.read("Retype your password: ", true)
     coroutine.yield()
     if term.getInput() == first then
-        saveText("Project:jPass", md5.sumhexa(first))
+        term.savefile("jPass", md5.sumhexa(first))
+        term.savefile("jEntries", term.readfile("jEntries") or "")
     else
         term.print("Passwords did not match!\n")
     end
@@ -369,6 +395,8 @@ function jmainMenu(k)
         elseif jmenuSelect == 3 then
             term.coroutine = coroutine.create(jSearch)
         elseif jmenuSelect == 4 then
+            term.coroutine = coroutine.create(jSearchText)
+        elseif jmenuSelect == 5 then
             term.coroutine = coroutine.create(jSetup)
         end
         term.exit("")
@@ -716,6 +744,14 @@ if arg[1] then
 else
     print("Please specify a project to load!")
 end
+
+--[=[END_TAB]=]
+--[=[TAB:systemlogin]=]
+term.coroutine = coroutine.create(function()
+    term.read_system_password(1)
+    coroutine.yield()
+    term.print(term.getInput() and "Success" or "Could not authenticate")
+end)
 
 --[=[END_TAB]=]
 --[=[TAB:tabs]=]
